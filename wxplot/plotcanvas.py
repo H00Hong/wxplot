@@ -15,11 +15,11 @@ from typing import Tuple, Union, Sequence, Literal, Optional, Callable
 import wx
 import numpy as np
 from numpy.typing import NDArray
+from wx.lib.plot.utils import (DisplaySide, set_displayside, pendingDeprecation,
+                               TempStyle, scale_and_shift_point)
 
 from .polyobjects import (PlotPrintout, PlotGraphics, PolyMarker, PolyLine,
                           PolyBoxPlot, LINESTYLE)
-from .utils import (DisplaySide, set_displayside, pendingDeprecation,
-                    TempStyle, scale_and_shift_point)
 from ._ico import *
 
 
