@@ -14,8 +14,7 @@ from typing import Union, List, Tuple, Sequence, Literal, Optional
 import wx
 import numpy as np
 from numpy.typing import NDArray
-
-from .utils import pairwise, pendingDeprecation, TempStyle
+from wx.lib.plot.utils import pairwise, pendingDeprecation, TempStyle
 
 LINESTYLE = {
     '-': wx.PENSTYLE_SOLID,
