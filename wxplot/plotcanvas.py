@@ -1155,7 +1155,7 @@ class PlotCanvas(wx.Panel):
             # Both axis specified in Draw
             xAxis = np.nan_to_num(xAxis)
             yAxis = np.nan_to_num(yAxis)
-            p1, p2 = np.asarray([xAxis, yAxis]).T
+            p1, p2 = np.stack([xAxis, yAxis], 1)
 
         # saves most recent values
         self.last_draw = (graphics, np.asarray(xAxis), np.asarray(yAxis))
