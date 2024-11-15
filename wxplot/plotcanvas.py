@@ -1,11 +1,4 @@
 # -*- coding: utf-8 -*-
-"""
-plotcanvas.py
-=============
-
-This is the main window that you will want to import into your application.
-
-"""
 
 import base64
 import io
@@ -15,8 +8,8 @@ from typing import Tuple, Union, Sequence, Literal, Optional, Callable
 import wx
 import numpy as np
 from numpy.typing import NDArray
-from wx.lib.plot.utils import (DisplaySide, set_displayside, pendingDeprecation,
-                               TempStyle, scale_and_shift_point)
+from wx.lib.plot.utils import (DisplaySide, set_displayside, TempStyle,
+                               scale_and_shift_point)
 
 from .polyobjects import (PlotPrintout, PlotGraphics, PolyMarker, PolyLine,
                           PolyBoxPlot, LINESTYLE)
@@ -24,7 +17,8 @@ from ._ico import *
 
 
 ID_HOME = 10000
-ID_SAVE = 10001
+ID_DATAMARKER = 10001
+ID_SAVE = 10003
 
 def base64_to_bitmap(base64_str: str, size=()) -> wx.Bitmap:
     image_data = base64.b64decode(base64_str)
@@ -68,16 +62,7 @@ class PlotCanvas(wx.Panel):
         self.sb_vert.SetScrollbar(0, 1000, 1000, 1000)
         self.sb_hor = wx.ScrollBar(self, style=wx.SB_HORIZONTAL)
         self.sb_hor.SetScrollbar(0, 1000, 1000, 1000)
-
-        self.toolbar = wx.ToolBar(self, style=wx.TB_HORIZONTAL)
-        self.toolbar.AddTool(ID_HOME, '主页', base64_to_bitmap(ico_home, (32, 32)),
-                             '重置为初始位置')
-        self.toolbar.AddTool(ID_SAVE, '保存', base64_to_bitmap(ico_save, (32, 32)),
-                             '保存视图')
-        self.toolbar.AddStretchableSpace()
-        self.labloc = wx.StaticText(self.toolbar)
-        self.toolbar.AddControl(self.labloc)
-        self.toolbar.Realize()
+        self._init_toolbar()
 
         default_font = wx.Font(12, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL,
                                wx.FONTWEIGHT_NORMAL, False,
@@ -96,6 +81,24 @@ class PlotCanvas(wx.Panel):
         self._init_bind()
 
 #region _init
+    def _init_toolbar(self):
+        self.toolbar = wx.ToolBar(self, style=wx.TB_HORIZONTAL)
+        self.toolbar.AddTool(ID_HOME, '主页',
+                             base64_to_bitmap(ico_home, (32, 32)),
+                             '重置为初始位置')
+        self.toolbar.AddCheckTool(ID_DATAMARKER, '数据标记',
+                                  base64_to_bitmap(ico_marker, (32, 32)),
+                                  shortHelp='开关数据标记功能')
+        self.toolbar.AddTool(ID_SAVE, '保存',
+                             base64_to_bitmap(ico_save, (32, 32)),
+                             '保存视图')
+        self.toolbar.AddStretchableSpace()
+        self.poilab = wx.StaticText(self.toolbar)
+        self.toolbar.AddControl(self.poilab)
+        self.labloc = wx.StaticText(self.toolbar)
+        self.toolbar.AddControl(self.labloc)
+        self.toolbar.Realize()
+
     def _init_var(self):
         # Things for printing
         self._print_data = None
@@ -114,6 +117,7 @@ class PlotCanvas(wx.Panel):
         self._zoomEnabled: bool = False
         self._dragEnabled: bool = False
         self._labxy_l: int = 0
+        self._poilab_l: int = 0
 
         # Drawing Variables
         self.last_draw = None
@@ -176,7 +180,7 @@ class PlotCanvas(wx.Panel):
         sizer = wx.FlexGridSizer(2, 2, 0, 0)
         sizer.AddGrowableRow(0, 1)
         sizer.AddGrowableCol(0, 1)
-        
+
         sizer0 = wx.BoxSizer(wx.VERTICAL)
         if style == wx.TB_TOP:
             sizer0.Add(self.toolbar, 0, wx.EXPAND)
@@ -197,6 +201,7 @@ class PlotCanvas(wx.Panel):
     def _init_bind(self):
         # toolbar events
         self.Bind(wx.EVT_TOOL, self.OnMouseMiddleUp, id=ID_HOME)
+        self.Bind(wx.EVT_TOOL, self._on_datamarker, id=ID_DATAMARKER)
         self.Bind(wx.EVT_TOOL, self._on_save, id=ID_SAVE)
         # mouse events
         self.canvas.Bind(wx.EVT_LEFT_DOWN, self.OnMouseLeftDown)
@@ -591,6 +596,9 @@ class PlotCanvas(wx.Panel):
         self._pointLabelEnabled = value
         self.Redraw()  # will erase existing pointLabel if present
         self.last_PointLabel = None
+        self._poilab_l = 0
+        if not self._pointLabelEnabled:
+            self.set_poilab(None)
 
     def GetEnablePointLabel(self) -> bool:
         """Get the enablePointLabel value."""
@@ -629,7 +637,7 @@ class PlotCanvas(wx.Panel):
         """
         self._axesValuesEnabled = set_displayside(value)
         self.Redraw()
-    
+
     def GetEnableAxesValues(self) -> DisplaySide:
         """Get the enableAxesValues value."""
         return self._axesValuesEnabled
@@ -650,7 +658,7 @@ class PlotCanvas(wx.Panel):
         """
         self._ticksEnabled = set_displayside(value)
         self.Redraw()
-    
+
     def GetEnableTicks(self) -> DisplaySide:
         """Get the enableTicks value."""
         return self._ticksEnabled
@@ -667,7 +675,7 @@ class PlotCanvas(wx.Panel):
         if not isinstance(length, (tuple, list)):
             raise TypeError('`length` must be a 2-tuple of ints or floats')
         self._tickLength = length
-    
+
     def GetTickLength(self) -> Sequence[float]:
         """Get the tickLength value."""
         return self._tickLength
@@ -683,7 +691,7 @@ class PlotCanvas(wx.Panel):
             raise TypeError('`value` must be boolean True or False')
         self._titleEnabled = value
         self.Redraw()
-    
+
     def GetEnablePlotTitle(self) -> bool:
         """Get the enablePlotTitle value."""
         return self._titleEnabled
@@ -692,11 +700,15 @@ class PlotCanvas(wx.Panel):
         """
         Set the enablePointLabel function.
         
-        :param func: the function of pointLabelFunc.
-        :type func: Callable
+        Parameters
+        ----------
+        func : Callable | None
+            The function of pointLabelFunc.
+            - If None, use the self._DefaultDrawPointLabel
+            - If Callable, use the custom pointLabelFunc
 
-        TODO: More information is needed.
-        Sets the function with custom code for pointLabel drawing
+        .. example::
+           func: `~PlotCanvas._DefaultDrawPointLabel`
         """
         if func is None:
             self._pointLabelFunc = self._DefaultDrawPointLabel
@@ -712,6 +724,9 @@ class PlotCanvas(wx.Panel):
     def GetXY(self, event) -> NDArray[np.float64]:
         """Wrapper around _getXY, which handles log scales"""
         xy = self._getXY(event)
+        return self._check_xylog(xy)
+
+    def _check_xylog(self, xy: NDArray[np.float64]) -> NDArray[np.float64]:
         if self._logScale[0]:
             xy[0] = np.power(10, xy[0])
         if self._logScale[1]:
@@ -1120,6 +1135,7 @@ class PlotCanvas(wx.Panel):
         # set font size for every thing but title and legend
         dc.SetFont(self._getFont(self._fontSizeAxis))
         self.labloc.SetFont(self._getFont(self._fontSizeLoc))
+        self.poilab.SetFont(self._getFont(self._fontSizeLoc))
 
         # sizes axis to axis type, create lower left and upper right
         # corners of plot
@@ -1339,9 +1355,19 @@ class PlotCanvas(wx.Panel):
         """
         This is the default function that defines how the pointLabels are plotted
 
-        :param dc: DC that will be passed
-        :param mDataDict: Dictionary of data that you want to use
-                          for the pointLabel
+        Parameters
+        ----------
+        - dc : wx.DC
+            DC that will be passed
+        - mDataDict : dict
+            Dictionary of data that you want to use for the pointLabel
+            
+            keys-values:
+            - 'curveNum': int,
+            - 'legend': str,
+            - 'pIndex': int,
+            - 'pointXY': NDArray,
+            - 'scaledXY': NDArray
 
         As an example I have decided I want a box at the curve point
         with some text information about the curve plotted below.
@@ -1349,18 +1375,24 @@ class PlotCanvas(wx.Panel):
         """
         dc.SetPen(wx.Pen(wx.BLACK))
         dc.SetBrush(wx.Brush(wx.BLACK, wx.BRUSHSTYLE_SOLID))
+        dc.SetFont(self._getFont(self._fontSizeLoc))
 
         sx, sy = mDataDict['scaledXY']  # scaled x,y of closest point
         # 10by10 square centered on point
         dc.DrawRectangle(int(sx - 5), int(sy - 5), 10, 10)
-        px, py = mDataDict['pointXY']
-        cNum = mDataDict['curveNum']
-        pntIn = mDataDict['pIndex']
-        legend = mDataDict['legend']
+        px, py = np.round(mDataDict['pointXY'], 3)
         # make a string to display
-        s = "Crv# {}, '{}', Pt. ({:.3f}, {:.3f}), PtInd {}".format(
-            cNum, legend, px, py, pntIn)
-        dc.DrawText(s, int(sx), int(sy + 1))
+        sl = ["Crv# {}, '{}';".format(mDataDict['curveNum'], mDataDict['legend']),
+              "Pt. ({}, {}),".format(px, py),
+              "PtInd {}".format(mDataDict['pIndex'])]
+        # s = '\n'.join(sl)
+        # dc.DrawText(s, int(sx), int(sy + 1))
+        rai = self.printerScale * self._fontScale
+        dc.DrawTextList(sl,
+                        [(int(sx), int(sy + 1)),
+                         (int(sx), int(sy + 21*rai)),
+                         (int(sx), int(sy + 41*rai))])
+        return sl
 #endregion
 
 #region event_handlers
@@ -1410,8 +1442,26 @@ class PlotCanvas(wx.Panel):
         self.Zoom(self._getXY(event), ratio)
         # self.SetCursor(self.defaultCursor)
 
+    def set_poilab(self, sl: Union[Sequence[str], str, None]):
+        if sl is None:
+            self.poilab.SetLabel('')
+            self.toolbar.Realize()
+            return
+        if isinstance(sl, str):
+            s = sl
+        elif isinstance(sl, Sequence):
+            s = ' '.join(sl)
+        else:
+            raise TypeError('`sl` must be str or Sequence[str] or None.')
+        s += '  |    '
+        self.poilab.SetLabel(s)
+        if self._poilab_l < len(s):
+            self.toolbar.Realize()
+            self._poilab_l = len(s)
+
     def set_labxy(self, pntXY) -> None:
-        s = 'X = {:.3f} ; Y = {:.3f}       '.format(pntXY[0], pntXY[1])
+        x, y = np.round(pntXY, 3)
+        s = 'X = {} ; Y = {}     '.format(x, y)
         self.labloc.SetLabel(s)
         if self._labxy_l < len(s):
             # self.Layout()
@@ -1419,26 +1469,27 @@ class PlotCanvas(wx.Panel):
             self._labxy_l = len(s)
 
     def OnMotion(self, event) -> None:
+        xy0 = self._getXY(event)
         # 实时显示坐标
-        self.set_labxy(self.GetXY(event))
+        xy = self._check_xylog(xy0.copy())
+        self.set_labxy(xy)
         if self.last_draw is None:
             self._move_leave()
             return
 
-        xy = self._getXY(event)
-        # print(xy)
+        # print(xy0)
         graphics, xAxis, yAxis = self.last_draw
         # 拖拽处理
         if self._DragEnabled:
-            dx, dy = xy - self._dragPoint0
+            dx, dy = xy0 - self._dragPoint0
             xAxis = xAxis - dx
             yAxis = yAxis - dy
             self._Draw(graphics, xAxis, yAxis)
-            self._dragPoint0 = xy
+            self._dragPoint0 = xy0
             self._move_leave()
         # 单方向缩放处理
         if self._ZoomEnabled:
-            dx, dy = xy - self._zoomPoint1
+            dx, dy = xy0 - self._zoomPoint1
             if abs(dx) > abs(dy):
                 raito = (1 - dx / (xAxis[1] - xAxis[0]), 1)
                 self._ZoomEnabled = (True, 'x')
@@ -1448,8 +1499,20 @@ class PlotCanvas(wx.Panel):
             else:
                 raito = (1, 1)
             self.Zoom(self._zoomPoint0, raito)
-            self._zoomPoint1 = xy
+            self._zoomPoint1 = xy0
             self._move_leave()
+        # 显示点标签
+        if self._pointLabelEnabled:
+            dlst = self.GetClosestPoint(xy, True)
+            if dlst:
+                curveNum, legend, pIndex, pointXY, scaledXY, distance = dlst
+                self.UpdatePointLabel({
+                    'curveNum': curveNum,
+                    'legend': legend,
+                    'pIndex': pIndex,
+                    'pointXY': pointXY,
+                    'scaledXY': scaledXY
+                })
 
     def _move_leave(self) -> None:
         if not self.canvas.HasCapture():
@@ -1488,6 +1551,10 @@ class PlotCanvas(wx.Panel):
 
     def _on_save(self, event) -> None:
         self.SaveFile()
+
+    def _on_datamarker(self, event) -> None:
+        # print('datamarker')
+        self.SetEnablePointLabel(not self._pointLabelEnabled)
 
     def OnPaint(self, event) -> None:
         # All that is needed here is to draw the buffer to screen
@@ -1588,7 +1655,9 @@ class PlotCanvas(wx.Panel):
         else:
             tmp_Buffer = self._Buffer.GetSubBitmap((0, 0, width, height))
             dcs = wx.MemoryDC(self._Buffer)
-        self._pointLabelFunc(dcs, mDataDict)  # custom user pointLabel func
+        assert self._pointLabelFunc is not None
+        sl = self._pointLabelFunc(dcs, mDataDict)  # custom user pointLabel func
+        self.set_poilab(sl)
 
         dc = wx.ClientDC(self.canvas)
         dc = wx.BufferedDC(dc, self._Buffer)
@@ -1635,13 +1704,13 @@ class PlotCanvas(wx.Panel):
         # TextExtents for Title and Axis Labels
         dc.SetFont(self._getFont(self._fontSizeTitle))
         if self._titleEnabled:
-            title = graphics.GetTitle()
+            title = graphics.title
             titleWH = dc.GetTextExtent(title)
         else:
             titleWH = wx.Size(0, 0)
         dc.SetFont(self._getFont(self._fontSizeAxis))
-        xLabelWH = dc.GetTextExtent(graphics.GetXLabel())
-        yLabelWH = dc.GetTextExtent(graphics.GetYLabel())
+        xLabelWH = dc.GetTextExtent(graphics.xLabel)
+        yLabelWH = dc.GetTextExtent(graphics.yLabel)
         return titleWH, xLabelWH, yLabelWH
 
     def _legendWH(self, dc: wx.DC, graphics: PlotGraphics) -> Tuple[Tuple[float, float], Tuple[float, float], Tuple[float, float]]:
@@ -1658,7 +1727,7 @@ class PlotCanvas(wx.Panel):
             txtExt = dc.GetTextExtent(txtList[0])
             for txt in graphics.getLegendNames()[1:]:
                 temp: wx.Size = dc.GetTextExtent(txt)
-                txtExt:Tuple[float, float] = (max(txtExt[0], temp[0]), 
+                txtExt:Tuple[float, float] = (max(txtExt[0], temp[0]),
                                               max(txtExt[1], temp[1]))
             maxW = symExt[0] + txtExt[0]
             maxH = max(symExt[1], txtExt[1])
@@ -2131,7 +2200,7 @@ class PlotCanvas(wx.Panel):
                     (self.plotbox_size[0] - lhsW - rhsW) / 2. -
                     titleWH[0] / 2.,
                     self.plotbox_origin[1] - self.plotbox_size[1])
-        dc.DrawText(graphics.GetTitle(), int(titlePos[0]), int(titlePos[1]))
+        dc.DrawText(graphics.title, int(titlePos[0]), int(titlePos[1]))
 
     def _drawAxesLabels(self, dc, graphics: PlotGraphics, lhsW, rhsW, bottomH, topH,
                         xLabelWH, yLabelWH):
@@ -2150,13 +2219,13 @@ class PlotCanvas(wx.Panel):
                      (self.plotbox_size[0] - lhsW - rhsW) / 2. -
                      xLabelWH[0] / 2.,
                      self.plotbox_origin[1] - xLabelWH[1] - yTickLength)
-        dc.DrawText(graphics.GetXLabel(), int(xLabelPos[0]), int(xLabelPos[1]))
+        dc.DrawText(graphics.xLabel, int(xLabelPos[0]), int(xLabelPos[1]))
         yLabelPos = (self.plotbox_origin[0] - 3 * self._pointSize[0] +
                      xTickLength, self.plotbox_origin[1] - bottomH -
                      (self.plotbox_size[1] - bottomH - topH) / 2. +
                      yLabelWH[0] / 2.)
-        if graphics.GetYLabel():  # bug fix for Linux
-            dc.DrawRotatedText(graphics.GetYLabel(), int(yLabelPos[0]),
+        if graphics.yLabel:  # bug fix for Linux
+            dc.DrawRotatedText(graphics.yLabel, int(yLabelPos[0]),
                                int(yLabelPos[1]), 90)
 
     @TempStyle('pen')

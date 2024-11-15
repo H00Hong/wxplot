@@ -1,20 +1,14 @@
 # -*- coding: utf-8 -*-
-"""
-polyobjects.py
-==============
 
-This contains all of the PolyXXX objects used by :mod:`wx.lib.plot`.
-
-"""
-
-from abc import ABC
 from collections import namedtuple
 from typing import Union, List, Tuple, Sequence, Literal, Optional
 
 import wx
 import numpy as np
 from numpy.typing import NDArray
-from wx.lib.plot.utils import pairwise, pendingDeprecation, TempStyle
+from wx.lib.plot.utils import pairwise, TempStyle
+from wx.lib.plot.polyobjects import (PolyPoints as _PolyPoints, PlotPrintout,
+                                     PlotGraphics as _PlotGraphics)
 
 LINESTYLE = {
     '-': wx.PENSTYLE_SOLID,
@@ -36,323 +30,29 @@ BRUSHSTYLE = {
 }
 
 
-class PolyPoints(ABC):
-    """
-    Base Class for lines and markers.
+class PolyPoints(_PolyPoints):
 
-    :param points: The points to plot
-    :type points: list of ``(x, y)`` pairs
-    :param attr: Additional attributes
-    :type attr: dict
-
-    .. warning::
-       All methods are private.
-    """
+    _points: NDArray[np.float64]
+    _logscale: Tuple[bool, bool]
+    _absScale: Tuple[bool, bool]
+    _symlogscale: Tuple[bool, bool]
+    _pointSize: Tuple[float, float]
+    currentScale: Tuple[float, float]
+    currentShift: Tuple[float, float]
+    scaled: NDArray[np.float64]
 
     def __init__(self, points, **attr):
-        self._points: NDArray[np.float64] = np.asarray(points, np.float64)
-        self._logscale: Tuple[bool, bool] = (False, False)
-        self._absScale: Tuple[bool, bool] = (False, False)
-        self._symlogscale: Tuple[bool, bool] = (False, False)
-        self._pointSize: Tuple[float, float] = (1.0, 1.0)
-        self.currentScale: Tuple[float, float] = (1, 1)
-        self.currentShift: Tuple[float, float] = (0, 0)
-        self.scaled: NDArray[np.float64] = self.points
-        self.attributes = {}
-        self.attributes.update(self._attributes)
-        for name, value in attr.items():
-            if name not in self._attributes:
-                err_txt = 'Style attribute incorrect. Should be one of {}'
-                raise KeyError(err_txt.format(self._attributes.keys()))
-            self.attributes[name] = value
+        _PolyPoints.__init__(self, points, attr)
+        # self._points: NDArray[np.float64] = np.asarray(points, np.float64)
 
-        for it in ('_style', '_fillstyle', '_edgestyle', '_style'):
+        for it in ('_style', '_fillstyle', '_edgestyle'):
             if hasattr(self, it):
+                style = getattr(self, it)
                 try:
-                    style = getattr(self, it)
                     self.attributes[it[1:]] = style[self.attributes[it[1:]]]
                 except KeyError:
                     err_txt = 'Style attribute incorrect. Should be one of {}'
                     raise KeyError(err_txt.format(style.keys()))
-
-    @property
-    def logScale(self):
-        """
-        A tuple of ``(x_axis_is_log10, y_axis_is_log10)`` booleans. If a value
-        is ``True``, then that axis is plotted on a logarithmic base 10 scale.
-
-        :getter: Returns the current value of logScale
-        :setter: Sets the value of logScale
-        :type: tuple of bool, length 2
-        :raises ValueError: when setting an invalid value
-        """
-        return self._logscale
-
-    @logScale.setter
-    def logScale(self, logscale):
-        if not isinstance(logscale, tuple) or len(logscale) != 2:
-            raise ValueError('`logscale` must be a 2-tuple of bools')
-        self._logscale = logscale
-
-    def setLogScale(self, logscale):
-        """
-        Set to change the axes to plot Log10(values)
-
-        Value must be a tuple of booleans (x_axis_bool, y_axis_bool)
-
-        .. deprecated:: Feb 27, 2016
-
-           Use the :attr:`~wx.lib.plot.polyobjects.PolyPoints.logScale`
-           property instead.
-        """
-        self._logscale = logscale
-
-    @property
-    def symLogScale(self):
-        """
-        .. warning::
-
-           Not yet implemented.
-
-        A tuple of ``(x_axis_is_SymLog10, y_axis_is_SymLog10)`` booleans.
-        If a value is ``True``, then that axis is plotted on a symmetric
-        logarithmic base 10 scale.
-
-        A Symmetric Log10 scale means that values can be positive and
-        negative. Any values less than
-        :attr:`~wx.lig.plot.PolyPoints.symLogThresh` will be plotted on
-        a linear scale to avoid the plot going to infinity near 0.
-
-        :getter: Returns the current value of symLogScale
-        :setter: Sets the value of symLogScale
-        :type: tuple of bool, length 2
-        :raises ValueError: when setting an invalid value
-
-        .. notes::
-
-           This is a simplified example of how SymLog works::
-
-             if x >= thresh:
-                 x = Log10(x)
-             elif x =< thresh:
-                 x = -Log10(Abs(x))
-             else:
-                 x = x
-
-        .. seealso::
-
-           + :attr:`~wx.lib.plot.PolyPoints.symLogThresh`
-           + See http://matplotlib.org/examples/pylab_examples/symlog_demo.html
-             for an example.
-        """
-        return self._symlogscale
-
-    # TODO: Implement symmetric log scale
-    @symLogScale.setter
-    def symLogScale(self, symlogscale, thresh):
-        raise NotImplementedError('Symmetric Log Scale not yet implemented')
-
-        if not isinstance(symlogscale, tuple) or len(symlogscale) != 2:
-            raise ValueError('`symlogscale` must be a 2-tuple of bools')
-        self._symlogscale = symlogscale
-
-    @property
-    def symLogThresh(self):
-        """
-        .. warning::
-
-           Not yet implemented.
-
-        A tuple of ``(x_thresh, y_thresh)`` floats that define where the plot
-        changes to linear scale when using a symmetric log scale.
-
-        :getter: Returns the current value of symLogThresh
-        :setter: Sets the value of symLogThresh
-        :type: tuple of float, length 2
-        :raises ValueError: when setting an invalid value
-
-        .. notes::
-
-           This is a simplified example of how SymLog works::
-
-             if x >= thresh:
-                 x = Log10(x)
-             elif x =< thresh:
-                 x = -Log10(Abs(x))
-             else:
-                 x = x
-
-        .. seealso::
-
-           + :attr:`~wx.lib.plot.PolyPoints.symLogScale`
-           + See http://matplotlib.org/examples/pylab_examples/symlog_demo.html
-             for an example.
-        """
-        return self._symlogscale
-
-    # TODO: Implement symmetric log scale threshold
-    @symLogThresh.setter
-    def symLogThresh(self, symlogscale, thresh):
-        raise NotImplementedError('Symmetric Log Scale not yet implemented')
-
-        if not isinstance(symlogscale, tuple) or len(symlogscale) != 2:
-            raise ValueError('`symlogscale` must be a 2-tuple of bools')
-        self._symlogscale = symlogscale
-
-    @property
-    def absScale(self):
-        """
-        A tuple of ``(x_axis_is_abs, y_axis_is_abs)`` booleans. If a value
-        is ``True``, then that axis is plotted on an absolute value scale.
-
-        :getter: Returns the current value of absScale
-        :setter: Sets the value of absScale
-        :type: tuple of bool, length 2
-        :raises ValueError: when setting an invalid value
-        """
-        return self._absScale
-
-    @absScale.setter
-    def absScale(self, absscale):
-
-        if not isinstance(absscale, tuple) and len(absscale) == 2:
-            raise ValueError('`absscale` must be a 2-tuple of bools')
-        self._absScale = absscale
-
-    @property
-    def points(self):
-        """
-        Get or set the plotted points.
-
-        :getter: Returns the current value of points, adjusting for the
-                 various scale options such as Log, Abs, or SymLog.
-        :setter: Sets the value of points.
-        :type: list of `(x, y)` pairs
-
-        .. Note::
-
-           Only set unscaled points - do not perform the log, abs, or symlog
-           adjustments yourself.
-        """
-        data = np.array(self._points, copy=True)  # need the copy
-        # TODO: get rid of the
-        # need for copy
-
-        # work on X:
-        if self.absScale[0]:
-            data = self._abs(data, 0)
-        if self.logScale[0]:
-            data = self._log10(data, 0)
-
-        if self.symLogScale[0]:
-            # TODO: implement symLogScale
-            # Should symLogScale override absScale? My vote is no.
-            # Should symLogScale override logScale? My vote is yes.
-            #   - symLogScale could be a parameter passed to logScale...
-            pass
-
-        # work on Y:
-        if self.absScale[1]:
-            data = self._abs(data, 1)
-        if self.logScale[1]:
-            data = self._log10(data, 1)
-
-        if self.symLogScale[1]:
-            # TODO: implement symLogScale
-            pass
-
-        return data
-
-    @points.setter
-    def points(self, points):
-        self._points = points
-
-    def _log10(self, data, index):
-        """ Take the Log10 of the data, dropping any negative values """
-        data = np.compress(data[:, index] > 0, data, 0)
-        data[:, index] = np.log10(data[:, index])
-        return data
-
-    def _abs(self, data, index):
-        """ Take the Abs of the data """
-        data[:, index] = np.abs(data[:, index])
-        return data
-
-    def boundingBox(self) -> Tuple[NDArray[np.float64], NDArray[np.float64]]:
-        """
-        Returns the bounding box for the entire dataset as a tuple with this
-        format::
-
-            ((minX, minY), (maxX, maxY))
-
-        :returns: boundingbox
-        :rtype: numpy array of ``[[minX, minY], [maxX, maxY]]``
-        """
-        if len(self.points) == 0:
-            # no curves to draw
-            # defaults to (-1,-1) and (1,1) but axis can be set in Draw
-            minXY = np.array([-1.0, -1.0])
-            maxXY = np.array([1.0, 1.0])
-        else:
-            minXY = np.minimum.reduce(self.points)
-            maxXY = np.maximum.reduce(self.points)
-        return minXY, maxXY
-
-    def scaleAndShift(self, scale=(1, 1), shift=(0, 0)):
-        """
-        Scales and shifts the data for plotting.
-
-        :param scale: The values to scale the data by.
-        :type scale: list of floats: ``[x_scale, y_scale]``
-        :param shift: The value to shift the data by. This should be in scaled
-                      units
-        :type shift: list of floats: ``[x_shift, y_shift]``
-        :returns: None
-        """
-        if len(self.points) == 0:
-            # no curves to draw
-            return
-
-        # TODO: Can we remove the if statement altogether? Does
-        #       scaleAndShift ever get called when the current value equals
-        #       the new value?
-
-        # cast everything to list: some might be np.ndarray objects
-        if (list(scale) != list(self.currentScale)
-                or list(shift) != list(self.currentShift)):
-            # update point scaling
-            self.scaled = scale * self.points + shift
-            self.currentScale = scale
-            self.currentShift = shift
-        # else unchanged use the current scaling
-
-    def getLegend(self) -> str:
-        return self.attributes['legend']
-
-    def getClosestPoint(self, pntXY, pointScaled=True):
-        """
-        Returns the index of closest point on the curve, pointXY,
-        scaledXY, distance x, y in user coords.
-
-        if pointScaled == True, then based on screen coords
-        if pointScaled == False, then based on user coords
-        """
-        if pointScaled:
-            # Using screen coords
-            p = self.scaled
-            pxy = self.currentScale * np.array(pntXY) + self.currentShift
-        else:
-            # Using user coords
-            p = self.points
-            pxy = np.array(pntXY)
-        # determine distance for each point
-        d = np.sqrt(np.add.reduce((p - pxy)**2, 1))  # sqrt(dx^2+dy^2)
-        pntIndex = np.argmin(d)
-        dist = d[pntIndex]
-        return [
-            pntIndex, self.points[pntIndex],
-            self.scaled[pntIndex] / self._pointSize, dist
-        ]
 
     def draw(self, dc: wx.DC, printerScale: float, coord: Optional[NDArray[np.float64]] = None):
         raise NotImplementedError
@@ -596,16 +296,9 @@ class PolyLine(PolyMarker):
                             fillstyle=fillstyle,
                             marker=marker)
 
-    def _draw(self, dc, printerScale: float, coord):
+    def _draw(self, dc, printerScale, coord):
         """
         Draw the lines.
-
-        :param dc: The DC to draw on.
-        :type dc: :class:`wx.DC`
-        :param printerScale:
-        :type printerScale: float
-        :param coord: The legend coordinate?
-        :type coord: ???
         """
         colour = self.attributes['colour']
         width = self.attributes['width'] * printerScale * self._pointSize[0]
@@ -882,22 +575,30 @@ class PolyBarsBase(PolyPoints):
 class PolyBars(PolyBarsBase):
     """
     Creates a PolyBars object.
-
-    :param points: The data to plot.
-    :type points: sequence of ``(center, height)`` points
-    :param **attr: keyword attributes
-
-    =================================  =============  =======================
-    Keyword and Default                Description    Type
-    =================================  =============  =======================
-    ``barwidth=1.0``                   bar width      float or list of floats
-    ``edgecolour='black'``             edge color     :class:`wx.Colour`
-    ``edgewidth=1``                    edge width     float
-    ``edgestyle=wx.PENSTYLE_SOLID``    edge style     :class:`wx.PenStyle`
-    ``fillcolour='red'``               fill color     :class:`wx.Colour`
-    ``fillstyle=wx.BRUSHSTYLE_SOLID``  fill style     :class:`wx.BrushStyle`
-    ``legend=''``                      legend string  str
-    =================================  =============  =======================
+    
+    Parameters
+    ----------
+    - points : list of `(center, height)` values
+        The points that make up the line
+    - barwidth : float | list[float]
+        The width of the bars
+    - edgecolour : `wx.Colour` | str
+        The colour of the line
+    - edgewidth : float
+        The width of the edges
+    - edgestyle : {'-', '--', ':', '__', '-.'}
+        The line style
+        - '-': Solid line
+        - '--': Long dashed line
+        - ':': Dotted line
+        - '-.': Dot dash line
+        - '__': Short dashed line
+    - fillcolour : `wx.Colour` | str
+        The fill colour of the bars.
+    - fillstyle : {'solid', 'transparent'}
+        The fill style of the marker
+    - legend : str
+        The legend string
 
     .. important::
 
@@ -972,22 +673,29 @@ class PolyHistogram(PolyBarsBase):
     """
     Creates a PolyHistogram object.
 
-    :param hist: The histogram data.
-    :type hist: sequence of ``y`` values that define the heights of the bars
-    :param binspec: The bin specification.
-    :type binspec: sequence of ``x`` values that define the edges of the bins
-    :param **attr: keyword attributes
-
-    =================================  =============  =======================
-    Keyword and Default                Description    Type
-    =================================  =============  =======================
-    ``edgecolour='black'``             edge color     :class:`wx.Colour`
-    ``edgewidth=3``                    edge width     float
-    ``edgestyle=wx.PENSTYLE_SOLID``    edge style     :class:`wx.PenStyle`
-    ``fillcolour='blue'``              fill color     :class:`wx.Colour`
-    ``fillstyle=wx.BRUSHSTYLE_SOLID``  fill style     :class:`wx.BrushStyle`
-    ``legend=''``                      legend string  str
-    =================================  =============  =======================
+    Parameters
+    ----------
+    - hist : sequence of ``y`` values that define the heights of the bars
+        The histogram data
+    - binspec : sequence of ``x`` values that define the edges of the bins
+        The bin specification
+    - edgecolour : `wx.Colour` | str
+        The colour of the line
+    - edgewidth : float
+        The width of the edges
+    - edgestyle : {'-', '--', ':', '__', '-.'}
+        The line style
+        - '-': Solid line
+        - '--': Long dashed line
+        - ':': Dotted line
+        - '-.': Dot dash line
+        - '__': Short dashed line
+    - fillcolour : `wx.Colour` | str
+        The fill colour of the bars.
+    - fillstyle : {'solid', 'transparent'}
+        The fill style of the marker
+    - legend : str
+        The legend string
 
     .. tip::
 
@@ -1022,11 +730,12 @@ class PolyHistogram(PolyBarsBase):
         self.binspec = binspec
 
         # define the bins and center x locations
-        self.bins = list(pairwise(self.binspec))
-        bar_center_x = (pair[0] + (pair[1] - pair[0]) / 2
-                        for pair in self.bins)
-
-        points = list(zip(bar_center_x, self.hist))
+        self.bins = np.array(pairwise(self.binspec))
+        bar_center_x = self.bins[:, 0] + (self.bins[:, 1] - self.bins[:, 0]) / 2
+        # bar_center_x = (pair[0] + (pair[1] - pair[0]) / 2
+        #                 for pair in self.bins)
+        # points = list(zip(bar_center_x, self.hist))
+        points = np.asarray((bar_center_x, self.hist)).T
         PolyPoints.__init__(self,
                             points,
                             edgecolour=edgecolour,
@@ -1060,22 +769,32 @@ class PolyHistogram(PolyBarsBase):
             dc.DrawLines(coord)  # draw legend line
 
 
+BPData = namedtuple(
+    'bpdata',
+    ('min', 'low_whisker', 'q25', 'median', 'q75', 'high_whisker', 'max'))
+
+
 class PolyBoxPlot(PolyPoints):
     """
     Creates a PolyBoxPlot object.
 
-    :param data: Raw data to create a box plot from.
-    :type data: sequence of int or float
-    :param **attr: keyword attributes
-
-    =================================  =============  =======================
-    Keyword and Default                Description    Type
-    =================================  =============  =======================
-    ``colour='black'``                 edge color     :class:`wx.Colour`
-    ``width=1``                        edge width     float
-    ``style=wx.PENSTYLE_SOLID``        edge style     :class:`wx.PenStyle`
-    ``legend=''``                      legend string  str
-    =================================  =============  =======================
+    Parameters
+    ----------
+    - points : sequence of int or float
+        Raw data to create a box plot from.
+    - colour : `wx.Colour` | str
+        The colour of the line
+    - width : float
+        The width of the line
+    - style : {'-', '--', ':', '__', '-.'}
+        The line style
+        - '-': Solid line
+        - '--': Long dashed line
+        - ':': Dotted line
+        - '-.': Dot dash line
+        - '__': Short dashed line
+    - legend : str
+        The legend string
 
     .. note::
 
@@ -1169,16 +888,16 @@ class PolyBoxPlot(PolyPoints):
 
         # combine the outliers with the box plot data
         data_to_use = np.concatenate((self._bpdata, self._outliers))
-        data_to_use = np.array([(xpos, x) for x in data_to_use])
+        data_to_use = np.asarray([(xpos, x) for x in data_to_use])
 
         if pointScaled:
             # Use screen coords
             p = self.scaled
-            pxy = self.currentScale * np.array(pntXY) + self.currentShift
+            pxy = self.currentScale * np.asarray(pntXY) + self.currentShift
         else:
             # Using user coords
             p = self._points
-            pxy = np.array(pntXY)
+            pxy = np.asarray(pntXY)
 
         # determine distance for each point
         d = np.sqrt(np.add.reduce((p - pxy)**2, 1))  # sqrt(dx^2+dy^2)
@@ -1234,13 +953,8 @@ class PolyBoxPlot(PolyPoints):
 
         median = float(np.median(data))
 
-        BPData = namedtuple('bpdata', ('min', 'low_whisker', 'q25', 'median',
-                                       'q75', 'high_whisker', 'max'))
-
-        bpdata = BPData(min_data, low_whisker, q25, median, q75, high_whisker,
-                        max_data)
-
-        return bpdata
+        return BPData(min_data, low_whisker, q25, median, q75, high_whisker,
+                      max_data)
 
     def calcOutliers(self, data=None):
         """
@@ -1397,18 +1111,20 @@ class PolyBoxPlot(PolyPoints):
         dc.DrawRectangleList(rect.astype(np.int64))
 
 
-class PlotGraphics(object):
+class PlotGraphics(_PlotGraphics):
     """
     Creates a PlotGraphics object.
 
-    :param objects: The Poly objects to plot.
-    :type objects: list of :class:`~plot.PolyPoints` objects
-    :param title: The title shown at the top of the graph.
-    :type title: str
-    :param xLabel: The x-axis label.
-    :type xLabel: str
-    :param yLabel: The y-axis label.
-    :type yLabel: str
+    Parameters
+    ----------
+    - objects : Sequence[PolyPoints]
+        The Poly objects to plot
+    - title : str
+        The title shown at the top of the graph
+    - xLabel : str
+        The x-axis label
+    - yLabel : str
+        The y-axis label
 
     .. warning::
 
@@ -1430,98 +1146,6 @@ class PlotGraphics(object):
         self._yLabel = yLabel
         self._pointSize = (1.0, 1.0)
 
-    @property
-    def logScale(self):
-        if len(self.objects) == 0:
-            return
-        return [obj.logScale for obj in self.objects]
-
-    @logScale.setter
-    def logScale(self, logscale):
-        # XXX: error checking done by PolyPoints class
-        #        if not isinstance(logscale, tuple) and len(logscale) != 2:
-        #            raise TypeError('logscale must be a 2-tuple of bools')
-        if len(self.objects) == 0:
-            return
-        for obj in self.objects:
-            obj.logScale = logscale
-
-    def SetLogScale(self, logscale):
-        """Set the log scale boolean value."""
-        self.logScale = logscale
-
-    @property
-    def absScale(self):
-        if len(self.objects) == 0:
-            return
-        return [obj.absScale for obj in self.objects]
-
-    @absScale.setter
-    def absScale(self, absscale):
-        # XXX: error checking done by PolyPoints class
-        #        if not isinstance(absscale, tuple) and len(absscale) != 2:
-        #            raise TypeError("absscale must be a 2-tuple of bools")
-        if len(self.objects) == 0:
-            return
-        for obj in self.objects:
-            obj.absScale = absscale
-
-    def boundingBox(self):
-        p1, p2 = self.objects[0].boundingBox()
-        for o in self.objects[1:]:
-            p1o, p2o = o.boundingBox()
-            p1 = np.minimum(p1, p1o)
-            p2 = np.maximum(p2, p2o)
-        return p1, p2
-
-    def scaleAndShift(self, scale=(1, 1), shift=(0, 0)):
-        for o in self.objects:
-            o.scaleAndShift(scale, shift)
-
-    def SetPrinterScale(self, scale):
-        """Thickens up lines and markers only for printing"""
-        self.printerScale = scale
-
-    def SetXLabel(self, xLabel=''):
-        """Set the X axis label on the graph"""
-        self._xLabel = xLabel
-
-    def SetYLabel(self, yLabel=''):
-        """Set the Y axis label on the graph"""
-        self._yLabel = yLabel
-
-    def SetTitle(self, title=''):
-        """Set the title at the top of graph"""
-        self._title = title
-
-    def GetXLabel(self):
-        """Get X axis label string"""
-        return self._xLabel
-
-    def GetYLabel(self):
-        """Get Y axis label string"""
-        return self._yLabel
-
-    def GetTitle(self):
-        """Get the title at the top of graph"""
-        return self._title
-
-    @property
-    def printerScale(self):
-        return self._printerScale
-
-    @printerScale.setter
-    def printerScale(self, scale):
-        """Thickens up lines and markers only for printing"""
-        self._printerScale = scale
-
-    def draw(self, dc: wx.DC):
-        for o in self.objects:
-            # t = _time.perf_counter()          # profile info
-            o._pointSize = self._pointSize
-            o.draw(dc, self._printerScale)
-            # print(o, "time=", _time.perf_counter()-t)
-
     def getSymExtent(self, printerScale) -> Tuple[float, float]:
         """Get max width and height of lines and markers symbols for legend"""
         self.objects[0]._pointSize = self._pointSize
@@ -1539,104 +1163,3 @@ class PlotGraphics(object):
         # for i in range(len(self)):
         #     lst[i] = self.objects[i].getLegend()
         return [o.getLegend() for o in self.objects]
-
-    def __len__(self):
-        return len(self.objects)
-
-    def __getitem__(self, item):
-        return self.objects[item]
-
-
-# -------------------------------------------------------------------------
-# Used to layout the printer page
-
-
-class PlotPrintout(wx.Printout):
-    """Controls how the plot is made in printing and previewing"""
-
-    # Do not change method names in this class,
-    # we have to override wx.Printout methods here!
-
-    def __init__(self, graph):
-        """graph is instance of plotCanvas to be printed or previewed"""
-        wx.Printout.__init__(self)
-        self.graph = graph
-
-    def HasPage(self, page):
-        if page == 1:
-            return True
-        else:
-            return False
-
-    def GetPageInfo(self):
-        return (1, 1, 1, 1)  # disable page numbers
-
-    def OnPrintPage(self, page):
-        dc = self.GetDC()  # allows using floats for certain functions
-        #        print("PPI Printer",self.GetPPIPrinter())
-        #        print("PPI Screen", self.GetPPIScreen())
-        #        print("DC GetSize", dc.GetSize())
-        #        print("GetPageSizePixels", self.GetPageSizePixels())
-        # Note PPIScreen does not give the correct number
-        # Calculate everything for printer and then scale for preview
-        PPIPrinter = self.GetPPIPrinter()  # printer dots/inch (w,h)
-        # PPIScreen= self.GetPPIScreen()          # screen dots/inch (w,h)
-        dcSize = dc.GetSize()  # DC size
-        if self.graph._antiAliasingEnabled and not isinstance(dc, wx.GCDC):
-            try:
-                dc = wx.GCDC(dc)
-            except Exception:
-                pass
-            else:
-                if self.graph._hiResEnabled:
-                    # high precision - each logical unit is 1/20 of a point
-                    dc.SetMapMode(wx.MM_TWIPS)
-        pageSize = self.GetPageSizePixels()  # page size in terms of pixcels
-        clientDcSize = self.graph.GetClientSize()
-
-        # find what the margins are (mm)
-        pgSetupData = self.graph.pageSetupData
-        margLeftSize, margTopSize = pgSetupData.GetMarginTopLeft()
-        margRightSize, margBottomSize = pgSetupData.GetMarginBottomRight()
-
-        # calculate offset and scale for dc
-        pixLeft = margLeftSize * PPIPrinter[0] / 25.4  # mm*(dots/in)/(mm/in)
-        pixRight = margRightSize * PPIPrinter[0] / 25.4
-        pixTop = margTopSize * PPIPrinter[1] / 25.4
-        pixBottom = margBottomSize * PPIPrinter[1] / 25.4
-
-        plotAreaW = pageSize[0] - (pixLeft + pixRight)
-        plotAreaH = pageSize[1] - (pixTop + pixBottom)
-
-        # ratio offset and scale to screen size if preview
-        if self.IsPreview():
-            ratioW = float(dcSize[0]) / pageSize[0]
-            ratioH = float(dcSize[1]) / pageSize[1]
-            pixLeft *= ratioW
-            pixTop *= ratioH
-            plotAreaW *= ratioW
-            plotAreaH *= ratioH
-
-        # rescale plot to page or preview plot area
-        self.graph._setSize(plotAreaW, plotAreaH)
-
-        # Set offset and scale
-        dc.SetDeviceOrigin(int(pixLeft), int(pixTop))
-
-        # Thicken up pens and increase marker size for printing
-        ratioW = float(plotAreaW) / clientDcSize[0]
-        ratioH = float(plotAreaH) / clientDcSize[1]
-        aveScale = (ratioW + ratioH) / 2
-        if self.graph._antiAliasingEnabled and not self.IsPreview():
-            scale = dc.GetUserScale()
-            dc.SetUserScale(scale[0] / self.graph._pointSize[0],
-                            scale[1] / self.graph._pointSize[1])
-        self.graph._setPrinterScale(aveScale)  # tickens up pens for printing
-
-        self.graph._printDraw(dc)
-        # rescale back to original
-        self.graph._setSize()
-        self.graph._setPrinterScale(1)
-        self.graph.Redraw()  # to get point label scale and shift correct
-
-        return True
