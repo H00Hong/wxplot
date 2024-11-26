@@ -1,14 +1,15 @@
 # -*- coding: utf-8 -*-
 
 from collections import namedtuple
-from typing import Union, List, Tuple, Sequence, Literal, Optional
+from typing import List, Literal, Optional, Sequence, Tuple, Union
 
-import wx
 import numpy as np
+import wx
 from numpy.typing import NDArray
-from wx.lib.plot.utils import pairwise, TempStyle
-from wx.lib.plot.polyobjects import (PolyPoints as _PolyPoints, PlotPrintout,
-                                     PlotGraphics as _PlotGraphics)
+from wx.lib.plot.polyobjects import PlotGraphics as _PlotGraphics
+from wx.lib.plot.polyobjects import PlotPrintout
+from wx.lib.plot.polyobjects import PolyPoints as _PolyPoints
+from wx.lib.plot.utils import TempStyle, pairwise
 
 LINESTYLE = {
     '-': wx.PENSTYLE_SOLID,
@@ -117,9 +118,15 @@ class PolyMarker(PolyPoints):
                  marker: Literal['circle', 'dot', 'square', 'triangle',
                                  'triangle_down', 'cross', 'plus'] = 'circle',
                  legend: str = ''):
-        PolyPoints.__init__(self, points, colour=colour, width=width, size=size,
-                         fillcolour=fillcolour, fillstyle=fillstyle,
-                         marker=marker, legend=legend)
+        PolyPoints.__init__(self,
+                            points,
+                            colour=colour,
+                            width=width,
+                            size=size,
+                            fillcolour=fillcolour,
+                            fillstyle=fillstyle,
+                            marker=marker,
+                            legend=legend)
 
     def draw(self, dc: wx.DC, printerScale: float, coord: Optional[NDArray[np.float64]] = None):
         """ Draw the points """
@@ -575,7 +582,7 @@ class PolyBarsBase(PolyPoints):
 class PolyBars(PolyBarsBase):
     """
     Creates a PolyBars object.
-    
+
     Parameters
     ----------
     - points : list of `(center, height)` values
@@ -1163,3 +1170,10 @@ class PlotGraphics(_PlotGraphics):
         # for i in range(len(self)):
         #     lst[i] = self.objects[i].getLegend()
         return [o.getLegend() for o in self.objects]
+
+
+__all__ = [
+    'LINESTYLE', 'BRUSHSTYLE', 'PlotGraphics', 'PlotPrintout', 'PolyPoints',
+    'PolyMarker', 'PolyLine', 'PolyBarsBase', 'PolyBars', 'PolyHistogram',
+    'PolyBoxPlot'
+]

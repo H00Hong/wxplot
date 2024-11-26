@@ -11,5 +11,5 @@ __all__ = [
 ]
 
 from .plotcanvas import PlotCanvas
-from .polyobjects import (PolyLine, PolySpline, PolyMarker, PolyHistogram,
-                          PolyBoxPlot, PlotGraphics, PlotPrintout)
+from .polyobjects import (PlotGraphics, PlotPrintout, PolyBoxPlot,
+                          PolyHistogram, PolyLine, PolyMarker, PolySpline)

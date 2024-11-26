@@ -3,29 +3,29 @@
 import base64
 import io
 import sys
-from typing import Tuple, Union, Sequence, Literal, Optional, Callable
+from typing import Callable, Literal, Optional, Sequence, Tuple, Union
 
-import wx
 import numpy as np
+import wx
 from numpy.typing import NDArray
-from wx.lib.plot.utils import (DisplaySide, set_displayside, TempStyle,
-                               scale_and_shift_point)
+from wx.lib.plot.utils import (DisplaySide, TempStyle, scale_and_shift_point,
+                               set_displayside)
 
-from .polyobjects import (PlotPrintout, PlotGraphics, PolyMarker, PolyLine,
-                          PolyBoxPlot, LINESTYLE)
 from ._ico import *
-
+from .polyobjects import (LINESTYLE, PlotGraphics, PlotPrintout, PolyBoxPlot,
+                          PolyLine, PolyMarker)
 
 ID_HOME = 10000
 ID_DATAMARKER = 10001
 ID_SAVE = 10003
+
 
 def base64_to_bitmap(base64_str: str, size=()) -> wx.Bitmap:
     image_data = base64.b64decode(base64_str)
     stream = io.BytesIO(image_data)
     image = wx.Image(stream, wx.BITMAP_TYPE_ANY)
     if size:
-        image = image.Scale(*size) # 调整大小
+        image = image.Scale(*size)  # 调整大小
     return wx.Bitmap(image)
 
 
@@ -34,13 +34,13 @@ class PlotCanvas(wx.Panel):
     Creates a PlotCanvas object.
 
     Subclass of a wx.Panel which holds two scrollbars and the actual
-    plotting canvas and toolbar (self.canvas, self.toolbar). It allows 
-    for simple general plotting of data with zoom, labels, and 
+    plotting canvas and toolbar (self.canvas, self.toolbar). It allows
+    for simple general plotting of data with zoom, labels, and
     automatic axis scaling.
 
     This is the main window that you will want to import into your
     application.
-    
+
     :param style: The toolbar location style
     :type style: int {`wx.TB_BOTTOM`, `wx.TB_TOP`} (default: `wx.TB_BOTTOM`)
 
@@ -130,7 +130,7 @@ class PlotCanvas(wx.Panel):
         self._logScale: Tuple[bool, bool] = (False, False)
         self._absScale: Tuple[bool, bool] = (False, False)
         self._gridEnabled: Tuple[bool, bool] = (True, True)
-        self._legendEnabled:bool = False
+        self._legendEnabled: bool = False
         self._titleEnabled: bool = True
         self._axesLabelsEnabled: bool = True
         self._centerLinesEnabled: bool = False
@@ -255,8 +255,8 @@ class PlotCanvas(wx.Panel):
 
     def SetGridPen(self, ls: Literal['-', '--', ':', '__', '-.'] = ':', colour=(180, 180, 180)) -> None:
         """
-        Set the grid pen. 
-        
+        Set the grid pen.
+
         Parameters
         ----------
         ls : {'-', '--', ':', '__', '-.'}
@@ -273,8 +273,8 @@ class PlotCanvas(wx.Panel):
 
     def SetDiagonalPen(self, ls: Literal['-', '--', ':', '__', '-.'] = ':', colour=wx.BLUE) -> None:
         """
-        Set the diagonal pen. 
-        
+        Set the diagonal pen.
+
         Parameters
         ----------
         ls : {'-', '--', ':', '__', '-.'}
@@ -291,8 +291,8 @@ class PlotCanvas(wx.Panel):
 
     def SetCenterLinePen(self, ls: Literal['-', '--', ':', '__', '-.'] = ':', colour=wx.RED) -> None:
         """
-        Set the center line pen. 
-        
+        Set the center line pen.
+
         Parameters
         ----------
         ls : {'-', '--', ':', '__', '-.'}
@@ -309,8 +309,8 @@ class PlotCanvas(wx.Panel):
 
     def SetAxesPen(self, ls: Literal['-', '--', ':', '__', '-.'] = ':', colour=wx.BLACK) -> None:
         """
-        Set the axes lines pen. 
-        
+        Set the axes lines pen.
+
         Parameters
         ----------
         ls : {'-', '--', ':', '__', '-.'}
@@ -327,8 +327,8 @@ class PlotCanvas(wx.Panel):
 
     def SetTickPen(self, ls: Literal['-', '--', ':', '__', '-.'] = ':', colour=wx.BLACK) -> None:
         """
-        Set the tick markers pen. 
-        
+        Set the tick markers pen.
+
         Parameters
         ----------
         ls : {'-', '--', ':', '__', '-.'}
@@ -486,13 +486,13 @@ class PlotCanvas(wx.Panel):
     def SetEnableGrid(self, value: Union[bool, Tuple[bool, bool]] = True) -> None:
         """
         Set the enableGrid value.
-        
+
         Parameters
         ----------
         value : bool or 2-tuple of bools
             The enableGrid value, whether the grid is enabled.
             A bool or 2-tuple of bools, e.g. (True, True)
-            
+
         If set to a single boolean value, then both X and y grids will be
         enabled (`enableGrid = True`) or disabled (`enableGrid = False`).
 
@@ -1361,7 +1361,7 @@ class PlotCanvas(wx.Panel):
             DC that will be passed
         - mDataDict : dict
             Dictionary of data that you want to use for the pointLabel
-            
+
             keys-values:
             - 'curveNum': int,
             - 'legend': str,
@@ -1396,6 +1396,7 @@ class PlotCanvas(wx.Panel):
 #endregion
 
 #region event_handlers
+
     @property
     def _DragEnabled(self):
         return self._dragEnabled
@@ -1592,9 +1593,9 @@ class PlotCanvas(wx.Panel):
     def OnLeave(self, event) -> None:
         """Used to erase pointLabel when mouse outside window"""
         if self._DragEnabled:
-            self._DragEnabled = False # 取消拖拽
+            self._DragEnabled = False  # 取消拖拽
         if self._ZoomEnabled:
-            self._ZoomEnabled = (False, '') # 取消缩放
+            self._ZoomEnabled = (False, '')  # 取消缩放
         if self.last_PointLabel is not None:
             self._drawPointLabel(self.last_PointLabel)  # erase old
             self.last_PointLabel = None
@@ -2202,8 +2203,8 @@ class PlotCanvas(wx.Panel):
                     self.plotbox_origin[1] - self.plotbox_size[1])
         dc.DrawText(graphics.title, int(titlePos[0]), int(titlePos[1]))
 
-    def _drawAxesLabels(self, dc, graphics: PlotGraphics, lhsW, rhsW, bottomH, topH,
-                        xLabelWH, yLabelWH):
+    def _drawAxesLabels(self, dc, graphics: PlotGraphics, lhsW, rhsW, bottomH,
+                        topH, xLabelWH, yLabelWH):
         """
         Draws the axes labels
         """
